@@ -1,0 +1,27 @@
+{
+  "name": "dsh-composer-attachments",
+  "version": "1.0.0",
+  "description": "Composer toolbar attachments: paste/pick images go through the native draft-image rail; other files upload to the workspace .dsh-uploads folder and are referenced as @relative-path in the draft.",
+  "type": "module",
+  "files": [
+    "dsh"
+  ],
+  "exports": {
+    ".": "./dsh/index.js",
+    "./package.json": "./package.json",
+    "./client": "./dsh/client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "slots",
+        "conversation"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

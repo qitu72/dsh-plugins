@@ -1,0 +1,5 @@
+# dsh bundle layer: mount the composer-attachments plugin (dsh/index.js via the
+# package root export; client half is dsh/client.js).
+- insert:
+    - id: composer-attachments
+      name: dsh-composer-attachments
