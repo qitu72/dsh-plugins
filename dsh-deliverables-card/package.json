@@ -1,0 +1,22 @@
+{
+  "name": "dsh-deliverables-card",
+  "version": "1.0.0",
+  "description": "交付物对话卡片 + HTML 新标签页打开",
+  "type": "module",
+  "files": ["dsh", "cordis.patch.yml"],
+  "exports": {
+    ".": "./dsh/index.js",
+    "./package.json": "./package.json",
+    "./client": "./dsh/client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}
