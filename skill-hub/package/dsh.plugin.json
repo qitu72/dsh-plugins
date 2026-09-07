@@ -1,0 +1,12 @@
+{
+  "name": "skill-hub",
+  "description": "Three-library skill picker for the DeepSeek Harness web GUI",
+  "version": "1.0.0",
+  "entry": {
+    "name": "skill-hub",
+    "inject": ["webServer"]
+  },
+  "client": {
+    "platform": "web"
+  }
+}
