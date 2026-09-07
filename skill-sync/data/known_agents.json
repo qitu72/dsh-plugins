@@ -1,0 +1,15 @@
+{
+  "_comment": [
+    "Optional override / extension catalogue.",
+    "Entries here are MERGED with the built-in list in skill_sync/agents.py.",
+    "Add support for an agent we do not know about yet -- PRs welcome.",
+    "Supported placeholders in \"path\": {home} = user home, {cwd} = current directory."
+  ],
+  "agents": [
+    {
+      "id": "example-agent",
+      "name": "Example Agent",
+      "path": "{home}/.example-agent/skills"
+    }
+  ]
+}
