@@ -64,6 +64,9 @@ window.__ModuleLoader__.load({
       + '.dsh-ap-toast-text{word-break:break-all}'
       + '.dsh-ap-toast-x{flex:none;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary,#8a8f98);font-size:13px;line-height:1;cursor:pointer;padding:0}'
       + '.dsh-ap-toast-x:hover{background:color-mix(in srgb,var(--dsw-alias-label-secondary,#8a8f98) 18%,transparent)}'
+      // 对话框高度拖拽：卡片顶边细长热区（cursor:ns-resize），悬停显示中线提示
+      + '[data-composer-card]::before{content:"";position:absolute;top:-7px;left:0;right:0;height:12px;border-radius:6px;cursor:ns-resize;z-index:6;opacity:0;transition:opacity .15s ease;background:linear-gradient(90deg,transparent,transparent calc(50% - 34px),var(--dsw-alias-border-l3,#c9cdd4) calc(50% - 34px),var(--dsw-alias-border-l3,#c9cdd4) calc(50% + 34px),transparent calc(50% + 34px))}'
+      + '[data-composer-card]:hover::before{opacity:1}'
 
     var B64T = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
     function toBase64(bytes) {
@@ -525,6 +528,31 @@ window.__ModuleLoader__.load({
         return function () { document.removeEventListener('keydown', onKeydown, true) }
       }, [])
 
+      // Ctrl/Cmd+Enter 换行（对齐 WorkBuddy/CodeBuddy 习惯）：拦下 shell 的「Ctrl+Enter 加速发送」，
+      // 改派一个 Shift+Enter 语义的合成 keydown，让编辑器走它自己的换行分支；
+      // 普通 Enter 发送、Shift+Enter 换行、文本输入全部不受影响。
+      React.useEffect(function () {
+        function onEnterKey(e) {
+          try {
+            if (e.key !== 'Enter' || e.shiftKey === true || e.altKey === true) return
+            if (!(e.ctrlKey === true || e.metaKey === true)) return
+            if (e.isComposing === true || e.keyCode === 229) return
+            var el = document.activeElement
+            var editable = el && el.closest ? el.closest('[contenteditable="true"]') : null
+            if (!editable) return
+            e.preventDefault()
+            e.stopPropagation()
+            var fake = new KeyboardEvent('keydown', {
+              key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+              shiftKey: true, bubbles: true, cancelable: true
+            })
+            editable.dispatchEvent(fake)
+          } catch (err) {}
+        }
+        document.addEventListener('keydown', onEnterKey, true)
+        return function () { document.removeEventListener('keydown', onEnterKey, true) }
+      }, [])
+
       if (!inputActions) return null
       return React.createElement('div', { className: 'dsh-ap-wrap' },
         React.createElement('button', {
@@ -548,6 +576,95 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // ===== 拖拽调整对话框高度：卡片顶边热区上下拖动，双击复位，localStorage 记忆，会话切换自动应用 =====
+    var RESIZE_KEY = 'dsh-ap-composer-h'
+    function resizeScrollOf(card) {
+      try { return card.querySelector('[data-input-scroll]') || null } catch (eR0) { return null }
+    }
+    function applySavedComposerHeight() {
+      try {
+        if (window.__dshApResizeDrag) return
+        var h = parseInt(localStorage.getItem(RESIZE_KEY), 10)
+        if (!h || h < 48) return
+        var cards = document.querySelectorAll('[data-composer-card]')
+        for (var i = 0; i < cards.length; i++) {
+          var s = resizeScrollOf(cards[i])
+          if (s && s.style.height !== h + 'px') { s.style.height = h + 'px'; s.style.maxHeight = 'none' }
+        }
+      } catch (eR1) {}
+    }
+    if (!window.__dshApResizeWired) {
+      window.__dshApResizeWired = true
+      document.addEventListener('pointerdown', function (e) {
+        try {
+          if (e.button !== 0) return
+          var t = e.target
+          var card = t && t.closest ? t.closest('[data-composer-card]') : null
+          if (!card) return
+          var rect = card.getBoundingClientRect()
+          if (e.clientY < rect.top || e.clientY - rect.top > 12) return
+          var s = resizeScrollOf(card)
+          if (!s) return
+          var startH = s.getBoundingClientRect().height
+          if (!startH || startH < 10) return
+          e.preventDefault()
+          window.__dshApResizeDrag = { s: s, startY: e.clientY, startH: startH, moved: false }
+          document.body.style.cursor = 'ns-resize'
+          document.body.style.userSelect = 'none'
+        } catch (eR2) {}
+      }, true)
+      document.addEventListener('pointermove', function (e) {
+        try {
+          var d = window.__dshApResizeDrag
+          if (!d) return
+          var maxH = Math.max(200, Math.round(window.innerHeight * 0.7))
+          var h = Math.max(48, Math.min(maxH, Math.round(d.startH + (d.startY - e.clientY))))
+          if (Math.abs(e.clientY - d.startY) > 3) d.moved = true
+          d.s.style.height = h + 'px'
+          d.s.style.maxHeight = 'none'
+          e.preventDefault()
+        } catch (eR3) {}
+      }, true)
+      document.addEventListener('pointerup', function () {
+        try {
+          var d = window.__dshApResizeDrag
+          if (!d) return
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+          if (d.moved) {
+            try { localStorage.setItem(RESIZE_KEY, String(Math.round(d.s.getBoundingClientRect().height))) } catch (eR4) {}
+            window.__dshApSuppressClick = Date.now()
+          }
+          window.__dshApResizeDrag = null
+        } catch (eR5) { window.__dshApResizeDrag = null }
+      }, true)
+      document.addEventListener('click', function (e) {
+        try {
+          if (window.__dshApSuppressClick && Date.now() - window.__dshApSuppressClick < 400) {
+            e.preventDefault()
+            e.stopPropagation()
+            window.__dshApSuppressClick = 0
+          }
+        } catch (eR6) {}
+      }, true)
+      document.addEventListener('dblclick', function (e) {
+        try {
+          var t = e.target
+          var card = t && t.closest ? t.closest('[data-composer-card]') : null
+          if (!card) return
+          var rect = card.getBoundingClientRect()
+          if (e.clientY < rect.top || e.clientY - rect.top > 12) return
+          try { localStorage.removeItem(RESIZE_KEY) } catch (eR7) {}
+          var cards = document.querySelectorAll('[data-composer-card]')
+          for (var i = 0; i < cards.length; i++) {
+            var s = resizeScrollOf(cards[i])
+            if (s) { s.style.height = ''; s.style.maxHeight = '' }
+          }
+        } catch (eR8) {}
+      }, true)
+      setInterval(applySavedComposerHeight, 800)
+    }
+    applySavedComposerHeight()
     var ctxRef = { current: undefined }
 
     exports.inject = ['slots', 'conversation']
