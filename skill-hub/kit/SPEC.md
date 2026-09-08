@@ -184,22 +184,30 @@ Get-ChildItem -Directory (Join-Path $temp 'node_modules') | Where-Object { $_.Na
 **切勿用 `pnpm add @anweat/dsh-browser`**：它会重解整棵依赖树，去拉 profile 里 `github:` 依赖（本机直连 github.com:443 不通）→ 超时失败且不落盘。
 重启 dsh 后应看到 `dsh web: http://127.0.0.1:3080`。
 
-### 8.2 技能选中后无法调用 / 点击无反应
-根因：客户端 `insert()` 旧代码调用 `inputActions.insertText()` / `append()`，但当前 dsh 0.1.0-rc.6 的 `InputActions` 接口（`deepseek-harness/.../ui-conversation/src/client/input/contract.ts`）只有 `setDraft(text)` 与 `submit()`，旧方法不存在 → 静默 no-op。
-修复（`kit/src/client/index.js` 与 `kit/lib/client.js` 已改）：
+### 8.2 技能选中后无法调用 / 点击无反应 / 覆写已输入内容
+**第一阶段（2026-08-24）— 点击无反应**：客户端 `insert()` 旧代码调用 `inputActions.insertText()` / `append()`，但当前 dsh 0.1.0-rc.6 的 `InputActions` 接口（`deepseek-harness/.../ui-conversation/src/client/input/contract.ts`）只有 `setDraft(text)` 与 `submit()`，旧方法不存在 → 静默 no-op。当时改为直接 `setDraft('@' + name)`。
+
+**第二阶段（2026-09-08）— 覆写已输入内容**：`setDraft(text)` 是**整体替换草稿**，不是插入——用户先输入文字再选技能，原文被整段吃掉。最终修复（2026-09-08，兔兔实测通过）：槽位组件经 `props.useInput` hook（uiSession provide 通道，session 作用域槽位均有）读取实时草稿，**拼接后写回**：
+
 ```js
 const insert = (name) => {
   try {
     const a = props.inputActions
     if (a && typeof a.setDraft === 'function') {
-      a.setDraft('@' + name)
+      const token = '@' + name
+      const base = String(latest.current.draft || '').replace(/\s+$/, '')
+      const next = !base ? token : base.endsWith(token) ? base : base + ' ' + token
+      a.setDraft(next)
     }
   } catch (_) {}
   setOpen(false)
 }
 ```
-改后点击技能会把 `@技能名` 写入输入框草稿，**不自动发送**——让用户继续编辑后再手动发送。
+
+组件头部需挂 `latest` ref（`useInput((s) => s)` 取 `input.draft`），槽位注册处把 `useInput: props.useInput` 透传给组件；参照实现见 `dsh-composer-attachments`（同一契约的成熟用例）。指令句变体（desktop 部署版 `pick()`）同理：原文后空行追加整段指令，重复选同一技能按「整段已存在」去重。
+改后点击技能会**保留原文追加** `@技能名`，**不自动发送**——让用户继续编辑后再手动发送。
 **切勿加 `submit()`**：否则点击技能后立即发送，用户来不及补充内容，agent 只收到 `@技能名` 导致空转（已踩过）。
+**切勿裸用 `setDraft(新内容)`**：它替换全稿，永远先读 `useInput` 再拼接（已踩过，2026-09-08）。
 改源码后需重建 `lib/client.js` 再部署（或直接改预编译 `lib/client.js` 跳过 esbuild）。
 
 ### 8.3 本机重建 esbuild 偶发失败

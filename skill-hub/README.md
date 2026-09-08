@@ -28,5 +28,5 @@ kit 内文档：
 ## 插件行为
 
 - Host：扫描三端 skills 目录，解析 SKILL.md frontmatter，经 `/api/skill-hub/list` 返回合并去重目录
-- Client：`conversation.input.left` 插槽注册技能条，点击把「加载并使用技能」指令回填输入框
+- Client：`conversation.input.left` 插槽注册技能条，点击把「加载并使用技能」指令**追加**到输入框——先经 `useInput` 读当前草稿再拼接写回，已输入内容永不被覆写；重复选同一技能自动去重（2026-09-08 修复，见 kit/SPEC.md §8.2）
 - 共用现有三库存储路径，不新建文件夹，不占模型上下文
