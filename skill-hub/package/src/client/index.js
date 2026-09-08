@@ -185,11 +185,17 @@ module.exports = {
 }
 .skhub_hint { opacity: .6; }
 .skhub_err { color: #ff6b6b; }
-/* Companion UI fix: align the at-file reference rail (the pill row above the
-   composer once the draft contains @references) with the composer card's
-   left edge - the dock slot renders without the card's side clearance.
-   Mirrors the hero shell's width/centering contract in the core styles. */
-.dsh_atFile_rail { width: min(calc(var(--dsh-composer-card-max-width, 752px) + 2 * var(--dsh-composer-side-clearance, 16px)), 100%); align-self: center; box-sizing: border-box; padding: 0 var(--dsh-composer-side-clearance, 16px); }
+/* Companion UI fixes (2026-09-08, round-3, per owner feedback):
+   1) Hide the dsh-at-file reference rail (the pill row above the composer) -
+      owner prefers the WorkBuddy-style INLINE look instead.
+   2) Make inline @ text references read as grey rounded pills (WorkBuddy
+      style), mirroring the core ReferenceChip aesthetics.
+   3) Enforce the ghost style on the composer-attachments toolbar buttons -
+      in some environments the plugin's own stylesheet fails to apply and
+      they fall back to ugly native button chrome. */
+.dsh_atFile_rail { display: none !important; }
+[data-composer-text-ref] { background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.14)); border-radius: 6px; padding: 1px 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.dsh-ap-wrap .dsh-ap-btn { border: none !important; background: transparent !important; box-shadow: none !important; }
 `
     document.head.appendChild(sheet)
 
