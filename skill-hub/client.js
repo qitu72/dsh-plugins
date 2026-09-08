@@ -24,6 +24,10 @@ return {
 
     function SkillStrip(props) {
       const { inputActions } = props
+      const useInput = props.useInput
+      const input = useInput ? useInput((s) => s) : null
+      const latest = React.useRef({})
+      latest.current = { draft: input && typeof input.draft === 'string' ? input.draft : '' }
       const [open, setOpen] = React.useState(false)
       const [query, setQuery] = React.useState('')
       const [data, setData] = React.useState(null)
@@ -39,8 +43,12 @@ return {
 
       const pick = (skill) => {
         const libs = (skill.libs || []).join(' / ')
-        const draft = '请加载并使用技能「' + skill.name + '」（' + skill.dir + '）：按 ' + skill.path + ' 的 SKILL.md 说明执行' + (libs ? '（三端技能库均有：' + libs + '）' : '') + '。'
-        inputActions.setDraft(draft)
+        const block = '请加载并使用技能「' + skill.name + '」（' + skill.dir + '）：按 ' + skill.path + ' 的 SKILL.md 说明执行' + (libs ? '（三端技能库均有：' + libs + '）' : '') + '。'
+        // setDraft replaces the WHOLE draft: read the live draft via useInput
+        // and append instead, so user-typed text is never overwritten.
+        const base = String(latest.current.draft || '').replace(/\s+$/, '')
+        const next = !base ? block : (base.indexOf(block) !== -1 ? base : base + '\n\n' + block)
+        inputActions.setDraft(next)
         setOpen(false)
         setQuery('')
       }
@@ -77,7 +85,7 @@ return {
 
     slots.inject('conversation.input.dock', () => slots.register(
       { name: 'conversation.input.dock', id: 'skill-hub', order: 30 },
-      (props) => React.createElement(SkillStrip, { inputActions: props.inputActions }),
+      (props) => React.createElement(SkillStrip, { inputActions: props.inputActions, useInput: props.useInput }),
     ))
   },
 }
