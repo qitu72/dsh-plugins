@@ -31,6 +31,10 @@ function togglePlugin(name, enable) {
   });
 }
 function SkillPicker(props) {
+  const useInput = props.useInput;
+  const input = useInput ? useInput((s) => s) : null;
+  const latest = React.useRef({});
+  latest.current = { draft: input && typeof input.draft === "string" ? input.draft : "" };
   const [open, setOpen] = React.useState(false);
   const [tab, setTab] = React.useState("skills");
   const [query, setQuery] = React.useState("");
@@ -63,7 +67,10 @@ function SkillPicker(props) {
     try {
       const a = props.inputActions;
       if (a && typeof a.setDraft === "function") {
-        a.setDraft("@" + name);
+        const token = "@" + name;
+        const base = String(latest.current.draft || "").replace(/\s+$/, "");
+        const next = !base ? token : base.endsWith(token) ? base : base + " " + token;
+        a.setDraft(next);
       }
     } catch (_) {
     }
@@ -275,7 +282,7 @@ module.exports = {
     document.head.appendChild(sheet);
     slots.inject("conversation.input.left", () => slots.register(
       { name: "conversation.input.left", id: "skill-hub", order: 20 },
-      (props) => React.createElement(SkillPicker, { inputActions: props.inputActions })
+      (props) => React.createElement(SkillPicker, { inputActions: props.inputActions, useInput: props.useInput })
     ));
   }
 };

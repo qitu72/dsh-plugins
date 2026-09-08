@@ -53,6 +53,10 @@ function togglePlugin(name, enable) {
 }
 
 function SkillPicker(props) {
+  const useInput = props.useInput
+  const input = useInput ? useInput((s) => s) : null
+  const latest = React.useRef({})
+  latest.current = { draft: input && typeof input.draft === 'string' ? input.draft : '' }
   const [open, setOpen] = React.useState(false)
   const [tab, setTab] = React.useState('skills') // 'skills' | 'plugins'
   const [query, setQuery] = React.useState('')
@@ -93,13 +97,18 @@ function SkillPicker(props) {
   }, [open])
 
   // Current dsh InputActions API (see ui-conversation input/contract.ts):
-  // setDraft(text) writes the full draft. We do NOT auto-submit — the user
-  // may want to add more text before sending. No insertText/append exists.
+  // setDraft(text) writes the FULL draft, so read the live draft via the
+  // useInput hook and APPEND the @token instead of overwriting what the
+  // user already typed. We do NOT auto-submit. No cursor-level insertText /
+  // append exists on the actions face, so append-at-end is the safe join.
   const insert = (name) => {
     try {
       const a = props.inputActions
       if (a && typeof a.setDraft === 'function') {
-        a.setDraft('@' + name)
+        const token = '@' + name
+        const base = String(latest.current.draft || '').replace(/\s+$/, '')
+        const next = !base ? token : base.endsWith(token) ? base : base + ' ' + token
+        a.setDraft(next)
       }
     } catch (_) { /* best effort */ }
     setOpen(false)
@@ -309,7 +318,7 @@ module.exports = {
 
     slots.inject('conversation.input.left', () => slots.register(
       { name: 'conversation.input.left', id: 'skill-hub', order: 20 },
-      (props) => React.createElement(SkillPicker, { inputActions: props.inputActions }),
+      (props) => React.createElement(SkillPicker, { inputActions: props.inputActions, useInput: props.useInput }),
     ))
   },
 }
