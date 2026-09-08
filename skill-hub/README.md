@@ -28,5 +28,6 @@ kit 内文档：
 ## 插件行为
 
 - Host：扫描三端 skills 目录，解析 SKILL.md frontmatter，经 `/api/skill-hub/list` 返回合并去重目录
-- Client：`conversation.input.left` 插槽注册技能条，点击把「加载并使用技能」指令**追加**到输入框——先经 `useInput` 读当前草稿再拼接写回，已输入内容永不被覆写；重复选同一技能自动去重（2026-09-08 修复，见 kit/SPEC.md §8.2）
+- Client：`conversation.input.left` 插槽注册技能条，点击把技能引用**置顶**到正文前方——先经 `useInput` 读当前草稿，把草稿里所有技能引用聚拢到最前（按引用顺序）、新选的接在引用区末尾（去重）、正文殿后，永不覆写已输入内容（2026-09-08 晚升级为方案A，见 kit/SPEC.md §8.2）
+- 附带 UI 修正：注入一条对齐样式，让 dsh-at-file 的引用条（草稿含 `@` 引用时出现在输入框上方的 pill 行）与输入框卡片左缘对齐（dock 槽位原生缺 side-clearance，pill 会左凸 16px）
 - 共用现有三库存储路径，不新建文件夹，不占模型上下文

@@ -208,6 +208,9 @@ const insert = (name) => {
 改后点击技能会**保留原文追加** `@技能名`，**不自动发送**——让用户继续编辑后再手动发送。
 **切勿加 `submit()`**：否则点击技能后立即发送，用户来不及补充内容，agent 只收到 `@技能名` 导致空转（已踩过）。
 **切勿裸用 `setDraft(新内容)`**：它替换全稿，永远先读 `useInput` 再拼接（已踩过，2026-09-08）。
+
+**第三阶段（2026-09-08 晚）— 置顶（方案A）+ 引用条对齐**：兔兔要求技能引用排到正文**前方**。现行为：选技能时把草稿里**所有**技能引用聚拢到最前（保持原引用顺序），新选的接在引用区末尾（重复选同一引用去重），剩余正文殿后——无论草稿原本多乱，最终恒为「技能引用区 → 正文」。指令句变体按行前缀 `请加载并使用技能「` 识别引用块；@token 变体按 `(^|\s)@[^\s]+` 识别引用 token。同一套 live 草稿重建逻辑（`latest.current.draft` + `setDraft(next)`）。
+同轮附带 UI 修正：dsh-at-file 的 `FilesDock` 引用条（草稿含 `@` 引用时出现在输入框上方的 pill 行，`conversation.input.dock` 槽位）原生没有卡片侧边距——pills 比 composer 卡片左缘凸出约 16px（`--dsh-composer-side-clearance`）。skill-hub 注入一条对齐样式覆盖（`.dsh_atFile_rail { width: min(calc(var(--dsh-composer-card-max-width) + 2*var(--dsh-composer-side-clearance)), 100%); align-self: center; padding: 0 var(--dsh-composer-side-clearance); }`，镜像核心 `.wSkVaW_composerHero` 的宽度/居中合同），随 skill-hub 部署矩阵走，不怕 at-file 升级冲掉。上游正解是给 dsh-at-file 提 PR，待议。
 改源码后需重建 `lib/client.js` 再部署（或直接改预编译 `lib/client.js` 跳过 esbuild）。
 
 ### 8.3 本机重建 esbuild 偶发失败
