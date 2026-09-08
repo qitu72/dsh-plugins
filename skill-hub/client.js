@@ -20,6 +20,11 @@ return {
 .skhub_itemDesc { color: var(--dsw-alias-label-tertiary, #9aa3af); font-size: 12px; line-height: 16px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .skhub_badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #1e222a); border: 1px solid var(--dsw-alias-border-l2, #3a3f4b); color: var(--dsw-alias-label-tertiary, #9aa3af); }
 .skhub_note { color: var(--dsw-alias-label-tertiary, #9aa3af); font-size: 11px; }
+/* Companion UI fix: align the at-file reference rail (the pill row above the
+   composer once the draft contains @references) with the composer card's
+   left edge - the dock slot renders without the card's side clearance.
+   Mirrors the hero shell's width/centering contract in the core styles. */
+.dsh_atFile_rail { width: min(calc(var(--dsh-composer-card-max-width, 752px) + 2 * var(--dsh-composer-side-clearance, 16px)), 100%); align-self: center; box-sizing: border-box; padding: 0 var(--dsh-composer-side-clearance, 16px); }
 `)
 
     function SkillStrip(props) {
@@ -43,11 +48,22 @@ return {
 
       const pick = (skill) => {
         const libs = (skill.libs || []).join(' / ')
-        const block = '请加载并使用技能「' + skill.name + '」（' + skill.dir + '）：按 ' + skill.path + ' 的 SKILL.md 说明执行' + (libs ? '（三端技能库均有：' + libs + '）' : '') + '。'
-        // setDraft replaces the WHOLE draft: read the live draft via useInput
-        // and append instead, so user-typed text is never overwritten.
-        const base = String(latest.current.draft || '').replace(/\s+$/, '')
-        const next = !base ? block : (base.indexOf(block) !== -1 ? base : base + '\n\n' + block)
+        const SKILL_PREFIX = '请加载并使用技能「'
+        const block = SKILL_PREFIX + skill.name + '」（' + skill.dir + '）：按 ' + skill.path + ' 的 SKILL.md 说明执行' + (libs ? '（三端技能库均有：' + libs + '）' : '') + '。'
+        // Skill-first (plan A): all skill instruction blocks in the draft are
+        // gathered ABOVE the prose (original order); the new block joins the
+        // end of the skill zone (deduped). setDraft replaces the WHOLE draft,
+        // so always rebuild from the live draft read via useInput.
+        const raw = String(latest.current.draft || '')
+        const zone = []
+        const body = []
+        for (const line of raw.split(/\r?\n/)) {
+          if (line.indexOf(SKILL_PREFIX) !== -1) zone.push(line)
+          else body.push(line)
+        }
+        if (zone.indexOf(block) === -1) zone.push(block)
+        const bodyText = body.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '')
+        const next = zone.join('\n') + (bodyText ? '\n\n' + bodyText : '')
         inputActions.setDraft(next)
         setOpen(false)
         setQuery('')

@@ -97,17 +97,31 @@ function SkillPicker(props) {
   }, [open])
 
   // Current dsh InputActions API (see ui-conversation input/contract.ts):
-  // setDraft(text) writes the FULL draft, so read the live draft via the
-  // useInput hook and APPEND the @token instead of overwriting what the
-  // user already typed. We do NOT auto-submit. No cursor-level insertText /
-  // append exists on the actions face, so append-at-end is the safe join.
+  // setDraft(text) writes the FULL draft, so always rebuild from the live
+  // draft read via the useInput hook. We do NOT auto-submit. No cursor-level
+  // insertText / append exists on the actions face.
+  // Skill-first (plan A): every @reference already in the draft is gathered
+  // to the FRONT (original order), the new @token joins the end of that
+  // reference zone (deduped), and the remaining prose follows — so the draft
+  // always ends up as「@refs… 正文」no matter how it was typed before.
   const insert = (name) => {
     try {
       const a = props.inputActions
       if (a && typeof a.setDraft === 'function') {
         const token = '@' + name
-        const base = String(latest.current.draft || '').replace(/\s+$/, '')
-        const next = !base ? token : base.endsWith(token) ? base : base + ' ' + token
+        const base = String(latest.current.draft || '')
+        const refs = []
+        const body = []
+        for (const line of base.split(/\r?\n/)) {
+          const kept = line.replace(/(^|\s)@[^\s]+/g, (m, pre) => {
+            refs.push(m.slice(pre.length))
+            return pre === '' ? '' : ' '
+          })
+          body.push(kept)
+        }
+        if (refs.indexOf(token) === -1) refs.push(token)
+        const bodyText = body.join('\n').replace(/ {2,}/g, ' ').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '')
+        const next = refs.join(' ') + (bodyText ? ' ' + bodyText : '')
         a.setDraft(next)
       }
     } catch (_) { /* best effort */ }
@@ -313,6 +327,11 @@ module.exports = {
 }
 .skhub_switch:disabled { opacity: .5; cursor: wait; }
 .skhub_switch_on { background: var(--accent, #3a6df0); border-color: var(--accent, #3a6df0); color: #fff; }
+/* Companion UI fix: align the at-file reference rail (the pill row above the
+   composer once the draft contains @references) with the composer card's
+   left edge - the dock slot renders without the card's side clearance.
+   Mirrors the hero shell's width/centering contract in the core styles. */
+.dsh_atFile_rail { width: min(calc(var(--dsh-composer-card-max-width, 752px) + 2 * var(--dsh-composer-side-clearance, 16px)), 100%); align-self: center; box-sizing: border-box; padding: 0 var(--dsh-composer-side-clearance, 16px); }
 `
     document.head.appendChild(sheet)
 

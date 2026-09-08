@@ -67,11 +67,24 @@ function SkillPicker(props) {
     try {
       const a = props.inputActions
       if (a && typeof a.setDraft === 'function') {
-        // setDraft writes the FULL draft: read the live draft via the useInput
-        // hook and APPEND the @token instead of overwriting user-typed text.
+        // setDraft writes the FULL draft, so always rebuild from the live
+        // draft (useInput hook). Skill-first (plan A): gather every @ref in
+        // the draft to the FRONT (original order), new @token appended to the
+        // reference zone (deduped), remaining prose follows.
         const token = '@' + name
-        const base = String(latest.current.draft || '').replace(/\s+$/, '')
-        const next = !base ? token : base.endsWith(token) ? base : base + ' ' + token
+        const base = String(latest.current.draft || '')
+        const refs = []
+        const body = []
+        for (const line of base.split(/\r?\n/)) {
+          const kept = line.replace(/(^|\s)@[^\s]+/g, (m, pre) => {
+            refs.push(m.slice(pre.length))
+            return pre === '' ? '' : ' '
+          })
+          body.push(kept)
+        }
+        if (refs.indexOf(token) === -1) refs.push(token)
+        const bodyText = body.join('\n').replace(/ {2,}/g, ' ').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '')
+        const next = refs.join(' ') + (bodyText ? ' ' + bodyText : '')
         a.setDraft(next)
       } else if (a && typeof a.insertText === 'function') a.insertText('@' + name)
       else if (a && typeof a.append === 'function') a.append('@' + name)
@@ -172,6 +185,11 @@ module.exports = {
 }
 .skhub_hint { opacity: .6; }
 .skhub_err { color: #ff6b6b; }
+/* Companion UI fix: align the at-file reference rail (the pill row above the
+   composer once the draft contains @references) with the composer card's
+   left edge - the dock slot renders without the card's side clearance.
+   Mirrors the hero shell's width/centering contract in the core styles. */
+.dsh_atFile_rail { width: min(calc(var(--dsh-composer-card-max-width, 752px) + 2 * var(--dsh-composer-side-clearance, 16px)), 100%); align-self: center; box-sizing: border-box; padding: 0 var(--dsh-composer-side-clearance, 16px); }
 `
     document.head.appendChild(sheet)
 
