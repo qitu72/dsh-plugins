@@ -2,6 +2,7 @@
 // Usage: pass this file's content as code.client to cordis_define.
 // The line below is the plugin function body (do not wrap further).
 return {
+  inject: ['inputTriggers'],
   apply(ctx) {
     const slots = ctx.get('slots')
     if (slots === undefined) return
@@ -109,5 +110,59 @@ return {
       { name: 'conversation.input.dock', id: 'skill-hub', order: 30 },
       (props) => React.createElement(SkillStrip, { inputActions: props.inputActions, useInput: props.useInput }),
     ))
+
+    // Lexicon source: grey-pill hook + @ popup skills (see kit/src notes).
+    function createSkillSource(fetchSkills) {
+      var listeners = []
+      var names = []
+      function notify() {
+        for (var i = 0; i < listeners.length; i++) { try { listeners[i]() } catch (_) {} }
+      }
+      function load() {
+        return Promise.resolve().then(fetchSkills).then(function (skills) {
+          names = (skills || []).map(function (s) { return s.name }).filter(Boolean)
+          notify()
+        }).catch(function () {})
+      }
+      return {
+        ensure: load,
+        source: {
+          trigger: '@',
+          name: 'skill-hub',
+          candidates: function (session, opts) {
+            return Promise.resolve().then(fetchSkills).then(function (skills) {
+              var q = String((opts && opts.query) || '').toLowerCase()
+              var rows = []
+              for (var i = 0; i < (skills || []).length; i++) {
+                var s = skills[i]
+                if (!s || !s.name) continue
+                if (q && s.name.toLowerCase().indexOf(q) === -1 && (s.description || '').toLowerCase().indexOf(q) === -1) continue
+                rows.push({ name: s.name, value: s.name, description: s.description || undefined })
+              }
+              return rows.slice(0, 12)
+            }).catch(function () { return [] })
+          },
+          warm: function () { load() },
+          onPick: function (pick) {
+            var v = pick && pick.candidate && pick.candidate.value
+            return v === undefined ? undefined : { text: '@' + v + ' ' }
+          },
+          lexicon: function () { return names },
+          subscribeLexicon: function (session, listener) {
+            listeners.push(listener)
+            return function () { var i = listeners.indexOf(listener); if (i !== -1) listeners.splice(i, 1) }
+          }
+        }
+      }
+    }
+    try {
+      const inputTriggers = ctx.get('inputTriggers')
+      if (inputTriggers && typeof inputTriggers.registerSource === 'function') {
+        const src = createSkillSource(() => host.call('skillHub.list').then((res) => (res && res.skills) || []))
+        const disposeSource = inputTriggers.registerSource(src.source)
+        src.ensure()
+        if (ctx.effect) ctx.effect(() => () => { try { disposeSource() } catch (_) {} })
+      }
+    } catch (_) { /* best effort */ }
   },
 }

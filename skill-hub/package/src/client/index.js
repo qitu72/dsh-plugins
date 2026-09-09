@@ -136,11 +136,57 @@ function SkillPicker(props) {
   )
 }
 
+/** Register skill names into the @ trigger lexicon (grey-pill hook + @ popup
+ * skills). See kit/src/client/index.js createSkillSource for the full notes. */
+function createSkillSource(fetchSkills) {
+  var listeners = []
+  var names = []
+  function notify() {
+    for (var i = 0; i < listeners.length; i++) { try { listeners[i]() } catch (_) {} }
+  }
+  function load() {
+    return Promise.resolve().then(fetchSkills).then(function (skills) {
+      names = (skills || []).map(function (s) { return s.name }).filter(Boolean)
+      notify()
+    }).catch(function () {})
+  }
+  return {
+    ensure: load,
+    source: {
+      trigger: '@',
+      name: 'skill-hub',
+      candidates: function (session, opts) {
+        return Promise.resolve().then(fetchSkills).then(function (skills) {
+          var q = String((opts && opts.query) || '').toLowerCase()
+          var rows = []
+          for (var i = 0; i < (skills || []).length; i++) {
+            var s = skills[i]
+            if (!s || !s.name) continue
+            if (q && s.name.toLowerCase().indexOf(q) === -1 && (s.description || '').toLowerCase().indexOf(q) === -1) continue
+            rows.push({ name: s.name, value: s.name, description: s.description || undefined })
+          }
+          return rows.slice(0, 12)
+        }).catch(function () { return [] })
+      },
+      warm: function () { load() },
+      onPick: function (pick) {
+        var v = pick && pick.candidate && pick.candidate.value
+        return v === undefined ? undefined : { text: '@' + v + ' ' }
+      },
+      lexicon: function () { return names },
+      subscribeLexicon: function (session, listener) {
+        listeners.push(listener)
+        return function () { var i = listeners.indexOf(listener); if (i !== -1) listeners.splice(i, 1) }
+      }
+    }
+  }
+}
+
 /** cordis client half: export the plugin definition via module.exports. */
 module.exports = {
-  inject: ['slots', 'connection'],
+  inject: ['slots', 'connection', 'inputTriggers'],
   apply(ctx) {
-    const slots = ctx.slots
+    const slots = ctx.get('slots')
 
     // Styles are injected via the DOM (not a `styles` service) — the CJS
     // ModuleLoader path does not expose `styles`; claimStyles auto-tags
@@ -203,5 +249,27 @@ module.exports = {
       { name: 'conversation.input.left', id: 'skill-hub', order: 20 },
       (props) => React.createElement(SkillPicker, { inputActions: props.inputActions, useInput: props.useInput }),
     ))
+
+    // Lexicon source (grey pill + @ popup skills); dispose with the fiber.
+    try {
+      const inputTriggers = ctx.get('inputTriggers')
+      if (inputTriggers && typeof inputTriggers.registerSource === 'function') {
+        const src = createSkillSource(() => fetch('/api/skill-hub/list', { headers: { accept: 'application/json' } }).then((res) => {
+          if (!res.ok) throw new Error('HTTP ' + res.status)
+          return res.json()
+        }).then((data) => {
+          const out = []
+          const groups = (data && data.groups) || []
+          for (let i = 0; i < groups.length; i++) {
+            const groupSkills = groups[i].skills || []
+            for (let j = 0; j < groupSkills.length; j++) out.push(groupSkills[j])
+          }
+          return out
+        }))
+        const disposeSource = inputTriggers.registerSource(src.source)
+        src.ensure()
+        if (ctx.effect) ctx.effect(() => () => { try { disposeSource() } catch (_) {} })
+      }
+    } catch (_) { /* best effort */ }
   },
 }
