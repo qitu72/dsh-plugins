@@ -2,6 +2,7 @@
 // Usage: pass this file's content as code.client to cordis_define.
 // The line below is the plugin function body (do not wrap further).
 return {
+  inject: ['inputTriggers'],
   apply(ctx) {
     const slots = ctx.get('slots')
     if (slots === undefined) return
@@ -20,6 +21,17 @@ return {
 .skhub_itemDesc { color: var(--dsw-alias-label-tertiary, #9aa3af); font-size: 12px; line-height: 16px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .skhub_badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #1e222a); border: 1px solid var(--dsw-alias-border-l2, #3a3f4b); color: var(--dsw-alias-label-tertiary, #9aa3af); }
 .skhub_note { color: var(--dsw-alias-label-tertiary, #9aa3af); font-size: 11px; }
+/* Companion UI fixes (2026-09-08, round-3, per owner feedback):
+   1) Hide the dsh-at-file reference rail (the pill row above the composer) -
+      owner prefers the WorkBuddy-style INLINE look instead.
+   2) Make inline @ text references read as grey rounded pills (WorkBuddy
+      style), mirroring the core ReferenceChip aesthetics.
+   3) Enforce the ghost style on the composer-attachments toolbar buttons -
+      in some environments the plugin's own stylesheet fails to apply and
+      they fall back to ugly native button chrome. */
+.dsh_atFile_rail { display: none !important; }
+[data-composer-text-ref] { background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.14)); border-radius: 6px; padding: 1px 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.dsh-ap-wrap .dsh-ap-btn { border: none !important; background: transparent !important; box-shadow: none !important; }
 `)
 
     function SkillStrip(props) {
@@ -43,11 +55,22 @@ return {
 
       const pick = (skill) => {
         const libs = (skill.libs || []).join(' / ')
-        const block = '请加载并使用技能「' + skill.name + '」（' + skill.dir + '）：按 ' + skill.path + ' 的 SKILL.md 说明执行' + (libs ? '（三端技能库均有：' + libs + '）' : '') + '。'
-        // setDraft replaces the WHOLE draft: read the live draft via useInput
-        // and append instead, so user-typed text is never overwritten.
-        const base = String(latest.current.draft || '').replace(/\s+$/, '')
-        const next = !base ? block : (base.indexOf(block) !== -1 ? base : base + '\n\n' + block)
+        const SKILL_PREFIX = '请加载并使用技能「'
+        const block = SKILL_PREFIX + skill.name + '」（' + skill.dir + '）：按 ' + skill.path + ' 的 SKILL.md 说明执行' + (libs ? '（三端技能库均有：' + libs + '）' : '') + '。'
+        // Skill-first (plan A): all skill instruction blocks in the draft are
+        // gathered ABOVE the prose (original order); the new block joins the
+        // end of the skill zone (deduped). setDraft replaces the WHOLE draft,
+        // so always rebuild from the live draft read via useInput.
+        const raw = String(latest.current.draft || '')
+        const zone = []
+        const body = []
+        for (const line of raw.split(/\r?\n/)) {
+          if (line.indexOf(SKILL_PREFIX) !== -1) zone.push(line)
+          else body.push(line)
+        }
+        if (zone.indexOf(block) === -1) zone.push(block)
+        const bodyText = body.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '')
+        const next = zone.join('\n') + (bodyText ? '\n\n' + bodyText : '')
         inputActions.setDraft(next)
         setOpen(false)
         setQuery('')
@@ -87,5 +110,59 @@ return {
       { name: 'conversation.input.dock', id: 'skill-hub', order: 30 },
       (props) => React.createElement(SkillStrip, { inputActions: props.inputActions, useInput: props.useInput }),
     ))
+
+    // Lexicon source: grey-pill hook + @ popup skills (see kit/src notes).
+    function createSkillSource(fetchSkills) {
+      var listeners = []
+      var names = []
+      function notify() {
+        for (var i = 0; i < listeners.length; i++) { try { listeners[i]() } catch (_) {} }
+      }
+      function load() {
+        return Promise.resolve().then(fetchSkills).then(function (skills) {
+          names = (skills || []).map(function (s) { return s.name }).filter(Boolean)
+          notify()
+        }).catch(function () {})
+      }
+      return {
+        ensure: load,
+        source: {
+          trigger: '@',
+          name: 'skill-hub',
+          candidates: function (session, opts) {
+            return Promise.resolve().then(fetchSkills).then(function (skills) {
+              var q = String((opts && opts.query) || '').toLowerCase()
+              var rows = []
+              for (var i = 0; i < (skills || []).length; i++) {
+                var s = skills[i]
+                if (!s || !s.name) continue
+                if (q && s.name.toLowerCase().indexOf(q) === -1 && (s.description || '').toLowerCase().indexOf(q) === -1) continue
+                rows.push({ name: s.name, value: s.name, description: s.description || undefined })
+              }
+              return rows.slice(0, 12)
+            }).catch(function () { return [] })
+          },
+          warm: function () { load() },
+          onPick: function (pick) {
+            var v = pick && pick.candidate && pick.candidate.value
+            return v === undefined ? undefined : { text: '@' + v + ' ' }
+          },
+          lexicon: function () { return names },
+          subscribeLexicon: function (session, listener) {
+            listeners.push(listener)
+            return function () { var i = listeners.indexOf(listener); if (i !== -1) listeners.splice(i, 1) }
+          }
+        }
+      }
+    }
+    try {
+      const inputTriggers = ctx.get('inputTriggers')
+      if (inputTriggers && typeof inputTriggers.registerSource === 'function') {
+        const src = createSkillSource(() => host.call('skillHub.list').then((res) => (res && res.skills) || []))
+        const disposeSource = inputTriggers.registerSource(src.source)
+        src.ensure()
+        if (ctx.effect) ctx.effect(() => () => { try { disposeSource() } catch (_) {} })
+      }
+    } catch (_) { /* best effort */ }
   },
 }

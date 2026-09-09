@@ -208,6 +208,9 @@ const insert = (name) => {
 改后点击技能会**保留原文追加** `@技能名`，**不自动发送**——让用户继续编辑后再手动发送。
 **切勿加 `submit()`**：否则点击技能后立即发送，用户来不及补充内容，agent 只收到 `@技能名` 导致空转（已踩过）。
 **切勿裸用 `setDraft(新内容)`**：它替换全稿，永远先读 `useInput` 再拼接（已踩过，2026-09-08）。
+
+**第三阶段（2026-09-08 晚）— 置顶（方案A）+ 引用条对齐**：兔兔要求技能引用排到正文**前方**。现行为：选技能时把草稿里**所有**技能引用聚拢到最前（保持原引用顺序），新选的接在引用区末尾（重复选同一引用去重），剩余正文殿后——无论草稿原本多乱，最终恒为「技能引用区 → 正文」。指令句变体按行前缀 `请加载并使用技能「` 识别引用块；@token 变体按 `(^|\s)@[^\s]+` 识别引用 token。同一套 live 草稿重建逻辑（`latest.current.draft` + `setDraft(next)`）。
+同轮附带 UI 三连（兔兔定稿，2026-09-08 深夜）：① **隐藏** dsh-at-file 的 `FilesDock` 引用条（`.dsh_atFile_rail{display:none!important}`——兔兔看了对齐版仍嫌丑，改走 WorkBuddy 式行内方案）；② 行内 `@` 文本引用（`[data-composer-text-ref]`）加灰底圆角样式（WorkBuddy 风，镜像核心 ReferenceChip 美学：`--dsw-alias-interactive-bg-hover` 底 + 6px 圆角）；③ 强制附件工具按钮幽灵态（`.dsh-ap-wrap .dsh-ap-btn{border:none!important;background:transparent!important}`——兔兔桌面端出现过原生丑盒按钮，其插件样式表疑似未生效，从 skill-hub 注入层兜底恢复）。三条都在 skill-hub 注入的样式表里，随部署矩阵走。上游正解（at-file 引用条样式 / attachments 按钮为何失效）待议。
 改源码后需重建 `lib/client.js` 再部署（或直接改预编译 `lib/client.js` 跳过 esbuild）。
 
 ### 8.3 本机重建 esbuild 偶发失败

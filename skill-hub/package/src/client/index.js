@@ -67,11 +67,24 @@ function SkillPicker(props) {
     try {
       const a = props.inputActions
       if (a && typeof a.setDraft === 'function') {
-        // setDraft writes the FULL draft: read the live draft via the useInput
-        // hook and APPEND the @token instead of overwriting user-typed text.
+        // setDraft writes the FULL draft, so always rebuild from the live
+        // draft (useInput hook). Skill-first (plan A): gather every @ref in
+        // the draft to the FRONT (original order), new @token appended to the
+        // reference zone (deduped), remaining prose follows.
         const token = '@' + name
-        const base = String(latest.current.draft || '').replace(/\s+$/, '')
-        const next = !base ? token : base.endsWith(token) ? base : base + ' ' + token
+        const base = String(latest.current.draft || '')
+        const refs = []
+        const body = []
+        for (const line of base.split(/\r?\n/)) {
+          const kept = line.replace(/(^|\s)@[^\s]+/g, (m, pre) => {
+            refs.push(m.slice(pre.length))
+            return pre === '' ? '' : ' '
+          })
+          body.push(kept)
+        }
+        if (refs.indexOf(token) === -1) refs.push(token)
+        const bodyText = body.join('\n').replace(/ {2,}/g, ' ').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '')
+        const next = refs.join(' ') + (bodyText ? ' ' + bodyText : '')
         a.setDraft(next)
       } else if (a && typeof a.insertText === 'function') a.insertText('@' + name)
       else if (a && typeof a.append === 'function') a.append('@' + name)
@@ -123,11 +136,57 @@ function SkillPicker(props) {
   )
 }
 
+/** Register skill names into the @ trigger lexicon (grey-pill hook + @ popup
+ * skills). See kit/src/client/index.js createSkillSource for the full notes. */
+function createSkillSource(fetchSkills) {
+  var listeners = []
+  var names = []
+  function notify() {
+    for (var i = 0; i < listeners.length; i++) { try { listeners[i]() } catch (_) {} }
+  }
+  function load() {
+    return Promise.resolve().then(fetchSkills).then(function (skills) {
+      names = (skills || []).map(function (s) { return s.name }).filter(Boolean)
+      notify()
+    }).catch(function () {})
+  }
+  return {
+    ensure: load,
+    source: {
+      trigger: '@',
+      name: 'skill-hub',
+      candidates: function (session, opts) {
+        return Promise.resolve().then(fetchSkills).then(function (skills) {
+          var q = String((opts && opts.query) || '').toLowerCase()
+          var rows = []
+          for (var i = 0; i < (skills || []).length; i++) {
+            var s = skills[i]
+            if (!s || !s.name) continue
+            if (q && s.name.toLowerCase().indexOf(q) === -1 && (s.description || '').toLowerCase().indexOf(q) === -1) continue
+            rows.push({ name: s.name, value: s.name, description: s.description || undefined })
+          }
+          return rows.slice(0, 12)
+        }).catch(function () { return [] })
+      },
+      warm: function () { load() },
+      onPick: function (pick) {
+        var v = pick && pick.candidate && pick.candidate.value
+        return v === undefined ? undefined : { text: '@' + v + ' ' }
+      },
+      lexicon: function () { return names },
+      subscribeLexicon: function (session, listener) {
+        listeners.push(listener)
+        return function () { var i = listeners.indexOf(listener); if (i !== -1) listeners.splice(i, 1) }
+      }
+    }
+  }
+}
+
 /** cordis client half: export the plugin definition via module.exports. */
 module.exports = {
-  inject: ['slots', 'connection'],
+  inject: ['slots', 'connection', 'inputTriggers'],
   apply(ctx) {
-    const slots = ctx.slots
+    const slots = ctx.get('slots')
 
     // Styles are injected via the DOM (not a `styles` service) — the CJS
     // ModuleLoader path does not expose `styles`; claimStyles auto-tags
@@ -172,6 +231,17 @@ module.exports = {
 }
 .skhub_hint { opacity: .6; }
 .skhub_err { color: #ff6b6b; }
+/* Companion UI fixes (2026-09-08, round-3, per owner feedback):
+   1) Hide the dsh-at-file reference rail (the pill row above the composer) -
+      owner prefers the WorkBuddy-style INLINE look instead.
+   2) Make inline @ text references read as grey rounded pills (WorkBuddy
+      style), mirroring the core ReferenceChip aesthetics.
+   3) Enforce the ghost style on the composer-attachments toolbar buttons -
+      in some environments the plugin's own stylesheet fails to apply and
+      they fall back to ugly native button chrome. */
+.dsh_atFile_rail { display: none !important; }
+[data-composer-text-ref] { background: var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.14)); border-radius: 6px; padding: 1px 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.dsh-ap-wrap .dsh-ap-btn { border: none !important; background: transparent !important; box-shadow: none !important; }
 `
     document.head.appendChild(sheet)
 
@@ -179,5 +249,27 @@ module.exports = {
       { name: 'conversation.input.left', id: 'skill-hub', order: 20 },
       (props) => React.createElement(SkillPicker, { inputActions: props.inputActions, useInput: props.useInput }),
     ))
+
+    // Lexicon source (grey pill + @ popup skills); dispose with the fiber.
+    try {
+      const inputTriggers = ctx.get('inputTriggers')
+      if (inputTriggers && typeof inputTriggers.registerSource === 'function') {
+        const src = createSkillSource(() => fetch('/api/skill-hub/list', { headers: { accept: 'application/json' } }).then((res) => {
+          if (!res.ok) throw new Error('HTTP ' + res.status)
+          return res.json()
+        }).then((data) => {
+          const out = []
+          const groups = (data && data.groups) || []
+          for (let i = 0; i < groups.length; i++) {
+            const groupSkills = groups[i].skills || []
+            for (let j = 0; j < groupSkills.length; j++) out.push(groupSkills[j])
+          }
+          return out
+        }))
+        const disposeSource = inputTriggers.registerSource(src.source)
+        src.ensure()
+        if (ctx.effect) ctx.effect(() => () => { try { disposeSource() } catch (_) {} })
+      }
+    } catch (_) { /* best effort */ }
   },
 }
