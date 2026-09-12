@@ -6,34 +6,37 @@
 ## 这是什么
 DeepSeek `dsh` 的「技能中心」插件 kit（前端 UI + 后端 API），已自包含：
 - `src/` 可移植源码（host 入口 `index.js`、前端 `client/index.js`、构建 `build.mjs`、3 个插件清单）
-- `lib/` 预编译产物（直接部署用，已含 `SKILL_HUB_DIRS` 环境变量覆盖）
+- `lib/` 预编译产物（直接部署用，含目录自动发现与 `SKILL_HUB_DIRS` 环境变量覆盖）
 - `legacy/` 内存注入版（给不支持 cordis 插件机制的目标 harness）
-- `deploy.ps1` 一键部署/修复脚本
+- `install.ps1` 一键安装（含 bundle 注册）/ `deploy.ps1` 维护者部署修复脚本
 - `SPEC.md` 完整规范、`README.md` 快速上手
 
-## 场景一：部署 / 修复到本机 dsh web（最常见）
-在 PowerShell 执行（路径含中文用户名，必须用 `$env:USERPROFILE` 拼接）：
+## 场景一：安装 / 修复到本机 dsh（最常见）
+在 PowerShell 进入本 kit 目录后执行：
 ```powershell
-& ($env:USERPROFILE + '\.workbuddy\binaries\node\versions\22.22.2\npm.cmd')  # 仅确保 node/npx 在 PATH
-pwsh 'D:\aolong\repos\skill-hub\kit\deploy.ps1' -Build -Restart
+pwsh install.ps1
 ```
-- `-Build`：在 `kit\` 根用 esbuild 重建 `lib`（esbuild 已装在 `kit\src\node_modules`）
-- `-Restart`：杀掉占用 3080 端口的旧进程 → `npx --no-install @deepseek-ai/dsh web` 重启 → 自动校验 `http://127.0.0.1:3080/api/skill-hub/list`
-- 预期输出：`OK: 3 groups, 312 skills total`
-- 浏览器 `Ctrl+Shift+R` 硬刷新生效
-- 只复制预编译产物（不重启）：`pwsh '...\deploy.ps1'`
-- 干跑预览（不改任何文件）：`pwsh '...\deploy.ps1' -WhatIf`
+- 脚本自动完成：发现 dsh profile → 复制 `lib/` + 3 个清单到 `<profile>\node_modules\skill-hub` → **把 `skill-hub` 写进 profile `package.json` 的 `dsh.profile.bundles` 数组与 `dependencies`**（不注册 bundle 插件不会被加载——最常见的「文件复制了却没反应」就是这个原因）
+- 可选：`-ProfileName <名字>` 指定 profile；`-Restart -WorkDir <dsh项目目录>` 自动重启
+- 完成后浏览器 `Ctrl+Shift+R` 硬刷新生效
+- 预期验证输出：`OK: N groups, M skills total`（N 取决于本机探测到的 Agent 数量）
+- 干跑预览（不改任何文件）：`pwsh install.ps1 -WhatIf`
+- 仅想刷新已注册插件的文件（bundle 已在数组里）也可用：`pwsh deploy.ps1`
 
 ## 场景二：移植到其他类似 Harness（换目录 / 换产品）
-1. 用 `SKILL_HUB_DIRS` 环境变量覆盖技能根目录，无需改源码：
-   `SKILL_HUB_DIRS='[{"label":"MyHarness","path":"C:\\skills"},"/other/skills"]'`
-   （JSON 数组，元素可为 `{label,path}` 或纯路径字符串）
-2. 在 `kit\` 根目录跑 `node build.mjs` 重建 `lib`
-3. 把 `kit\lib\` 与 `kit\src\` 下 3 个清单（`dsh.plugin.json`/`package.json`/`cordis.patch.yml`）复制到目标 harness 的插件目录
+1. 技能目录自动发现：任何 `<主目录>/.<agent>/skills` 都会被扫描到，无需配置。
+   需要追加自定义目录时，写 `~/.dsh/skill-hub.json`：
+   `{"extraRoots":[{"label":"MyHarness","path":"C:\\skills"}]}`
+   完全手动控制用 `{"roots":[...]}`；`{"autoScan":false}` 关闭主目录扫描。
+   也可用环境变量（替换一切）：`SKILL_HUB_DIRS='[{"label":"MyHarness","path":"C:\\skills"}]'`
+2. 重新构建：在 `kit\src` 内 `npm install` 后运行 `node src\build.mjs`
+   （build.mjs 路径锚定自身位置，任何 cwd 均可运行；产物输出到 `kit\lib`）
+3. 把 `kit\lib\` 与 3 个清单（`dsh.plugin.json`/`package.json`/`cordis.patch.yml`）复制到目标 harness 的插件目录并按其机制注册 bundle
 4. 若目标 harness 不支持 cordis 插件，改用 `kit\legacy\` 的 `host.js`/`client.js` 内存注入版
+   （其中 HOME 从 `process.env.USERPROFILE/HOME` 解析，解析失败时是 `CHANGE_ME` 占位符，手改即可）
 
 ## 必读的环境约束（已在脚本内固化，勿重复踩坑）
-- 路径含中文用户名：一律用 `$env:USERPROFILE` 拼接；node/npx 走 `C:\Users\七兔\.workbuddy\binaries\node\versions\22.22.2`
-- 部署脚本必须纯英文、用 `$args` 解析：Windows PowerShell 默认 GBK 读 `.ps1`，中文脚本会乱码导致括号/字符串解析失败
-- 本机无法直接 `git clone github.com:443`，但 npm 源 `registry.npmjs.org` 正常，`npx`/`npm install` 可用
+- 路径含中文用户名：一律用 `$env:USERPROFILE` 拼接；**不要**在脚本/文档里硬编码任何用户名
+- 脚本必须纯英文、用 `param()` 解析参数：Windows PowerShell 默认 GBK 读 `.ps1`，中文脚本会乱码导致括号/字符串解析失败
+- 构建/部署产物之后浏览器必须 **Ctrl+Shift+R** 硬刷新
 - 详细设计、可移植性、踩坑与恢复 SOP 见同目录 `SPEC.md`

@@ -1,7 +1,7 @@
 {
   "name": "skill-hub",
-  "description": "Three-library skill picker for the DSH web GUI: browse AutoClaw/CodeBuddy/WorkBuddy skills and fill a precise use instruction into the composer.",
-  "version": "1.1.0",
+  "description": "Skill hub for the DSH web GUI: auto-discovers local agent skill libraries (dsh/CodeBuddy/WorkBuddy/Claude Code/...) and inserts @skill references into the composer.",
+  "version": "1.2.0",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",

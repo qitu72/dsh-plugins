@@ -6,11 +6,20 @@ return {
     const fs = ctx.get('fs')
     if (fs === undefined) return
 
-    // The three client skill roots (single source of truth per client).
+    // Resolve the user home WITHOUT hardcoding a username (the memory-inject
+    // sandbox may or may not expose `process`). If HOME cannot be resolved,
+    // the placeholder forces a visible failure instead of silently scanning
+    // a wrong directory - edit CHANGE_ME to the real home path in that case.
+    const HOME = (typeof process !== 'undefined' && process.env)
+      ? (process.env.USERPROFILE || process.env.HOME || 'CHANGE_ME')
+      : 'CHANGE_ME'
+    const P = (rel) => HOME.replace(/[\\/]+$/, '') + '\\' + rel
+
+    // Skill roots (Windows separators; port to '\\' vs '/' when crossing OS).
     const LIBS = [
-      { id: 'AutoClaw', path: 'C:\\Users\\七兔\\.openclaw-autoclaw\\skills' },
-      { id: 'CodeBuddy', path: 'C:\\Users\\七兔\\.codebuddy\\skills' },
-      { id: 'WorkBuddy', path: 'C:\\Users\\七兔\\.workbuddy\\skills' },
+      { id: 'DeepSeek Harness', path: P('.dsh\\skills') },
+      { id: 'CodeBuddy', path: P('.codebuddy\\skills') },
+      { id: 'WorkBuddy', path: P('.workbuddy\\skills') },
     ]
 
     // Parse the YAML frontmatter block of a SKILL.md (name + description only).

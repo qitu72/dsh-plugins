@@ -1,6 +1,6 @@
 window.__ModuleLoader__.load({ id: 'skill-hub', factory: (require) => { var module = { exports: {} }; var exports = module.exports;
 
-// src/client/index.js
+// repos/dsh-plugins/skill-hub/kit/src/client/index.js
 var React = (() => {
   try {
     return require("react");
@@ -153,15 +153,20 @@ function SkillPicker(props) {
             React.createElement(
               "div",
               { className: "skhub_list" },
-              skills.length ? skills.map((s) => React.createElement(
+              g.error ? React.createElement("div", { className: "skhub_hint" }, "\u8BFB\u53D6\u5931\u8D25\uFF1A" + g.error) : skills.length ? skills.map((s) => React.createElement(
                 "div",
                 { className: "skhub_item", key: s.name, onClick: () => insert(s.name) },
                 React.createElement("div", { className: "skhub_item_name" }, s.name),
                 s.description && React.createElement("div", { className: "skhub_item_desc" }, s.description)
-              )) : React.createElement("div", { className: "skhub_hint" }, g.error ? "\u8BFB\u53D6\u5931\u8D25" : q ? "\u65E0\u5339\u914D\u6280\u80FD" : "\uFF08\u7A7A\uFF09")
+              )) : React.createElement("div", { className: "skhub_hint" }, q ? "\u65E0\u5339\u914D\u6280\u80FD" : "\uFF08\u7A7A\uFF09")
             )
           );
-        })
+        }),
+        !state.loading && !state.error && React.createElement(
+          "div",
+          { className: "skhub_foot", key: "foot" },
+          '\u76EE\u5F55\u6765\u81EA\u672C\u673A\u81EA\u52A8\u63A2\u6D4B\uFF08<home>/.<agent>/skills\uFF09\u3002\u6DFB\u52A0\u81EA\u5B9A\u4E49\u76EE\u5F55\uFF1A\u7F16\u8F91 ~/.dsh/skill-hub.json \u2192 {"extraRoots":["D:\\\\skills"]}\uFF0C\u91CD\u542F\u751F\u6548\u3002'
+        )
       ],
       // --- Plugins tab ---
       tab === "plugins" && [
@@ -309,6 +314,10 @@ module.exports = {
 }
 .skhub_hint { opacity: .6; }
 .skhub_err { color: #ff6b6b; }
+.skhub_foot {
+  margin-top: 6px; padding: 4px 6px; opacity: .45; font-size: 10px; line-height: 1.5;
+  border-top: 1px solid var(--border, #2a2f3a); word-break: break-all;
+}
 /* tab bar */
 .skhub_tabs { display: flex; gap: 4px; margin-bottom: 6px; }
 .skhub_tab {

@@ -8,17 +8,35 @@
  * extra scope that blocks those injected variables → "styles is not defined".
  *
  * Host: plain ESM for Node (resolved by the profile's own module system).
+ *
+ * All paths are anchored to THIS file (kit/src/build.mjs), so the script
+ * produces kit/lib/* no matter which directory it is invoked from. esbuild
+ * is resolved from kit/src/node_modules first (the documented install
+ * location), then from any hoisted location up the tree.
  */
-import { build } from 'esbuild'
 import { mkdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 
-mkdirSync('lib', { recursive: true })
+const srcDir = dirname(fileURLToPath(import.meta.url)) // kit/src
+const libDir = join(srcDir, '..', 'lib')               // kit/lib
+const require2 = createRequire(import.meta.url)
+
+function loadEsbuild() {
+  try { return require2('esbuild') } catch { /* fall through */ }
+  try { return require2(join(srcDir, 'node_modules', 'esbuild', 'lib', 'main.js')) } catch { /* fall through */ }
+  throw new Error('esbuild not found. Run `npm install` inside kit/src, or use the prebuilt kit/lib.')
+}
+
+const { build } = loadEsbuild()
+mkdirSync(libDir, { recursive: true })
 
 const dshExternal = ['@deepseek-ai/cordis', '@deepseek-ai/dsh-*']
 
 await build({
-  entryPoints: ['src/index.js'],
-  outfile: 'lib/index.js',
+  entryPoints: [join(srcDir, 'index.js')],
+  outfile: join(libDir, 'index.js'),
   bundle: true,
   format: 'esm',
   platform: 'node',
@@ -29,8 +47,8 @@ await build({
 })
 
 await build({
-  entryPoints: ['src/client/index.js'],
-  outfile: 'lib/client.js',
+  entryPoints: [join(srcDir, 'client', 'index.js')],
+  outfile: join(libDir, 'client.js'),
   bundle: true,
   format: 'cjs',
   platform: 'browser',

@@ -97,7 +97,6 @@ Invoke-RestMethod -Uri http://127.0.0.1:3080/api/skill-hub/list
 
 ```
 skill-hub/
-  README.md            # 本文件
   kit/
     install.ps1        # 一键安装（含 bundle 注册，给新用户）
     deploy.ps1         # 部署/修复（假设 bundle 已注册过，维护者用）
@@ -112,14 +111,5 @@ skill-hub/
 ## 插件行为（技术细节）
 
 - Host：扫描各技能库目录，解析 SKILL.md frontmatter，经 `/api/skill-hub/list` 返回合并目录；`/api/skill-hub/plugins` + `/toggle` 提供插件启停
-- Client：`conversation.input.left` 插槽注册技能条，点击把技能引用**置顶**到正文前方——先经 `useInput` 读当前草稿，把草稿里所有技能引用聚拢到最前（按引用顺序）、新选的接在引用区末尾（去重）、正文殿后，永不覆写已输入内容（见 kit/SPEC.md §8.2）
-- 附带 UI 修正（skill-hub 注入样式）：隐藏 dsh-at-file 引用条（输入框上方的 pill 行）；行内 `@` 引用渲染为灰底圆角标识（WorkBuddy 风）；兜底恢复附件工具按钮的幽灵样式
+- Client：`conversation.input.left` 插槽注册技能条，点击把技能引用**置顶**到正文前方，永不覆写已输入内容
 - 共用现有各库存储路径，不新建文件夹，不占模型上下文
-
-## 给本仓库维护者（兔兔本机）
-
-- 改源码后：`pwsh kit/deploy.ps1 -Build -Restart`（构建 → 复制 → 重启 → 验证）
-- 构建脚本 `kit/src/build.mjs` 已把路径锚定到自身位置，从任何 cwd 运行均可；esbuild 装在 `kit/src/node_modules`
-- 发版：更新 `kit/src` 与 `package/` 的版本号 → 在 `package/` 内 `npm pack` → tgz 复制到仓库根 → 全量同步 `D:\aolong\repos\skill-hub`（本机镜像）
-- `git push` 由兔兔手动执行（工作区铁律：禁止自动 push）
-- 兜底内存注入版：仓库根 `host.js` / `client.js`（等价 `kit/legacy/`），Agent 恢复指令见 `kit/AGENT_INSTRUCTIONS.md`；内存注入版重启 dsh web 后丢失
