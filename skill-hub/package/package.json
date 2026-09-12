@@ -1,37 +1,37 @@
 {
-  "name": "skill-hub",
-  "description": "Three-library skill picker for the DSH web GUI: browse AutoClaw/CodeBuddy/WorkBuddy skills and fill a precise use instruction into the composer.",
-  "version": "1.1.0",
-  "license": "MIT",
-  "type": "module",
-  "main": "lib/index.js",
-  "exports": {
-    ".": {
-      "default": "./lib/index.js"
-    },
-    "./client": {
-      "default": "./lib/client.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web"
-    }
-  },
-  "files": [
-    "lib",
-    "cordis.patch.yml",
-    "dsh.plugin.json",
-    "README.md"
-  ],
-  "scripts": {
-    "build": "node build.mjs"
-  },
-  "devDependencies": {
-    "esbuild": "^0.28.2"
-  }
+    "name":  "skill-hub",
+    "description":  "Skill hub for the DSH web GUI: auto-discovers local agent skill libraries (dsh/CodeBuddy/WorkBuddy/Claude Code/...) and inserts @skill references into the composer.",
+    "version":  "1.2.0",
+    "license":  "MIT",
+    "type":  "module",
+    "main":  "lib/index.js",
+    "exports":  {
+                    ".":  {
+                              "default":  "./lib/index.js"
+                          },
+                    "./client":  {
+                                     "default":  "./lib/client.js"
+                                 },
+                    "./package.json":  "./package.json"
+                },
+    "dsh":  {
+                "bundle":  {
+                               "patch":  "./cordis.patch.yml"
+                           },
+                "client":  {
+                               "platform":  "web"
+                           }
+            },
+    "files":  [
+                  "lib",
+                  "cordis.patch.yml",
+                  "dsh.plugin.json",
+                  "README.md"
+              ],
+    "scripts":  {
+                    "build":  "node build.mjs"
+                },
+    "devDependencies":  {
+                            "esbuild":  "^0.28.2"
+                        }
 }

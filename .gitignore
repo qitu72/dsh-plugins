@@ -11,3 +11,5 @@ __pycache__/
 *.bak-prepatch-*
 *.bak-sisi-*
 *.bak-2026*
+# skill-hub: npm tarball must ship with the repo (install method B)
+!skill-hub-*.tgz

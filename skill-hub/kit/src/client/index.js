@@ -197,15 +197,20 @@ function SkillPicker(props) {
           return React.createElement('div', { className: 'skhub_group', key: g.id },
             React.createElement('div', { className: 'skhub_group_title' }, g.label + '（' + skills.length + '）'),
             React.createElement('div', { className: 'skhub_list' },
-              skills.length
-                ? skills.map((s) => React.createElement('div', { className: 'skhub_item', key: s.name, onClick: () => insert(s.name) },
-                    React.createElement('div', { className: 'skhub_item_name' }, s.name),
-                    s.description && React.createElement('div', { className: 'skhub_item_desc' }, s.description),
-                  ))
-                : React.createElement('div', { className: 'skhub_hint' }, (g.error ? '读取失败' : (q ? '无匹配技能' : '（空）'))),
+              g.error
+                ? React.createElement('div', { className: 'skhub_hint' }, '读取失败：' + g.error)
+                : skills.length
+                  ? skills.map((s) => React.createElement('div', { className: 'skhub_item', key: s.name, onClick: () => insert(s.name) },
+                      React.createElement('div', { className: 'skhub_item_name' }, s.name),
+                      s.description && React.createElement('div', { className: 'skhub_item_desc' }, s.description),
+                    ))
+                  : React.createElement('div', { className: 'skhub_hint' }, (q ? '无匹配技能' : '（空）')),
             ),
           )
         }),
+        !state.loading && !state.error && React.createElement('div', { className: 'skhub_foot', key: 'foot' },
+          '目录来自本机自动探测（<home>/.<agent>/skills）。添加自定义目录：编辑 ~/.dsh/skill-hub.json → {"extraRoots":["D:\\\\skills"]}，重启生效。',
+        ),
       ],
       // --- Plugins tab ---
       tab === 'plugins' && [
@@ -335,6 +340,10 @@ module.exports = {
 }
 .skhub_hint { opacity: .6; }
 .skhub_err { color: #ff6b6b; }
+.skhub_foot {
+  margin-top: 6px; padding: 4px 6px; opacity: .45; font-size: 10px; line-height: 1.5;
+  border-top: 1px solid var(--border, #2a2f3a); word-break: break-all;
+}
 /* tab bar */
 .skhub_tabs { display: flex; gap: 4px; margin-bottom: 6px; }
 .skhub_tab {

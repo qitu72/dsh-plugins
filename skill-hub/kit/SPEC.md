@@ -7,8 +7,10 @@
 
 ## 1. 设计概述
 
-skill-hub 是一个 **DSh（DeepSeek Harness）Web 插件**，用途：在对话输入框旁加一个「🧩 技能」按钮，
-点开列出三端（AutoClaw / CodeBuddy / WorkBuddy）的技能库，搜索后把 `@技能名` 填入输入框。
+skill-hub 是一个 **DSH（DeepSeek Harness）Web 插件**，用途：在对话输入框旁加一个「🧩 技能」按钮，
+点开列出本机**自动探测**到的各 Agent 技能库（DeepSeek Harness / CodeBuddy / WorkBuddy / Claude Code /
+OpenCode / OpenClaw / Codex / Cursor / Windsurf / 任何 `<主目录>/.<agent>/skills` 形式的目录），
+搜索后把 `@技能名` 填入输入框。目录发现机制见 §4。
 
 **为什么不用内置 `host.listDirectory` RPC？**
 内置的目录列举被 `browse` 能力门控，本地 loopback 桌面上该选择器解析为 `native`
@@ -34,26 +36,32 @@ skill-hub 是一个 **DSh（DeepSeek Harness）Web 插件**，用途：在对话
 ## 2. 文件清单（绝对路径）
 
 ### 2.1 本 kit（可直接复制分发）
-- `D:\aolong\repos\skill-hub\kit\src\index.js` —— host 源码（含 `resolveRoots` 可移植目录解析）
-- `D:\aolong\repos\skill-hub\kit\src\client\index.js` —— client 源码（按钮/弹窗/搜索/外部关闭）
-- `D:\aolong\repos\skill-hub\kit\src\build.mjs` —— esbuild 构建脚本（产出 `lib/`）
-- `D:\aolong\repos\skill-hub\kit\src\dsh.plugin.json` —— 插件清单（声明 entry + client.web）
-- `D:\aolong\repos\skill-hub\kit\src\package.json` —— 含 `build` 脚本与 esbuild 依赖
-- `D:\aolong\repos\skill-hub\kit\src\cordis.patch.yml` —— 插件挂载点映射
-- `D:\aolong\repos\skill-hub\kit\lib\index.js`, `client.js`, `*.map` —— **预编译产物（已验证可用，部署即用）**
-- `D:\aolong\repos\skill-hub\kit\legacy\host.js`, `client.js` —— cordis_define 内存注入版（无需构建的兜底方案）
-- `D:\aolong\repos\skill-hub\kit\deploy.ps1` —— 一键部署/修复脚本
-- `D:\aolong\repos\skill-hub\kit\SPEC.md` —— 本文件
-- `D:\aolong\repos\skill-hub\kit\README.md` —— 快速上手
+- `kit/src/index.js` —— host 源码（含 `resolveRoots` 可导出目录解析 + 自动发现）
+- `kit/src/client/index.js` —— client 源码（按钮/弹窗/搜索/外部关闭）
+- `kit/src/build.mjs` —— esbuild 构建脚本（路径锚定自身位置，任何 cwd 可运行，产出 `../lib/`）
+- `kit/src/dsh.plugin.json` —— 插件清单（声明 entry + client.web）
+- `kit/src/package.json` —— 含 `build` 脚本与 esbuild 依赖（esbuild 装在 `kit/src/node_modules`）
+- `kit/src/cordis.patch.yml` —— 插件挂载点映射
+- `kit/lib/index.js`, `client.js`, `*.map` —— **预编译产物（已验证可用，部署即用）**
+- `kit/legacy/host.js`, `client.js` —— cordis_define 内存注入版（无需构建的兜底方案）
+- `kit/install.ps1` —— 一键安装（新用户用：复制文件 + **注册 bundle**）
+- `kit/deploy.ps1` —— 部署/修复（维护者用：假设 bundle 已注册）
+- `kit/smoke-resolve.mjs` —— 目录发现冒烟测试（`node smoke-resolve.mjs`）
+- `kit/SPEC.md` —— 本文件
+- `kit/README.md` —— 快速上手
 
 ### 2.2 运行期部署位置（dsh 实际加载处）
-- `C:\Users\七兔\.dsh\profiles\web\node_modules\skill-hub\lib\{index.js,client.js}`
-- `C:\Users\七兔\.dsh\profiles\web\node_modules\skill-hub\{dsh.plugin.json,package.json,cordis.patch.yml}`
-- 服务端口：`3080`（loopback），启动命令 `npx --no-install @deepseek-ai/dsh web`
+- `<home>\.dsh\profiles\<profile>\node_modules\skill-hub\lib\{index.js,client.js}`
+- `<home>\.dsh\profiles\<profile>\node_modules\skill-hub\{dsh.plugin.json,package.json,cordis.patch.yml}`
+- **必须同时满足**：`<profile>\package.json` 的 `dsh.profile.bundles` 数组含 `"skill-hub"`
+  （`install.ps1` 会自动写入；只复制文件不写数组 = 插件永不加载）
+- 服务端口：默认 `3080`（loopback），启动命令 `npx --no-install @deepseek-ai/dsh web`
 
-### 2.3 源仓库（保留历史版本）
-- `D:\aolong\repos\skill-hub\package\src\...` —— 同 kit/src（曾是构建源）
-- `D:\aolong\repos\skill-hub\{host.js,client.js}` —— 同 kit/legacy（cordis_define 存档）
+### 2.3 源仓库（保留历史版本；本节为本机维护者视角）
+- 发布仓：`repos\dsh-plugins`（github qitu72/dsh-plugins + cnb.cool 镜像），`skill-hub/` 为发布目录
+- 本机镜像：`D:\aolong\repos\skill-hub`（无 git；含 tgz 与 `package\` 打包目录；本机 profile 的
+  `dependencies` 以 `file:` 方式指向此处的 tgz）
+- `{host.js,client.js}` —— 同 kit/legacy（cordis_define 存档）
 
 ---
 
@@ -64,25 +72,39 @@ skill-hub 是一个 **DSh（DeepSeek Harness）Web 插件**，用途：在对话
 | **构建版（主用）** | `node_modules/skill-hub/lib/*` | 常规部署、复用分发 | 干净、随 profile 加载、可热更新 | 需 esbuild 构建 |
 | **内存注入版（兜底）** | `kit/legacy/{host.js,client.js}` | 构建环境坏了 / 想免构建临时恢复 | 无需构建、即时生效 | 重启 dsh web 后丢失，需重新注入 |
 
-> 内存注入版 `legacy/host.js` 里硬编码了 `C:\Users\七兔\...` 中文用户名路径，
-> 移植到其他机器时务必改成目标用户的真实路径或用 `$env:USERPROFILE` 拼接。
+> 内存注入版 `legacy/host.js` 的主目录从 `process.env.USERPROFILE/HOME` 解析
+> （沙箱可能不暴露 `process`），解析失败时为 `CHANGE_ME` 占位符，移植时手改为真实主目录即可。
 
 ---
 
-## 4. 可移植性（复用到其他 Harness 产品）
+## 4. 可移植性（目录发现 + 复用到其他 Harness 产品）
 
-1. **换技能目录**：host 端 `resolveRoots()` 默认扫描 AutoClaw/CodeBuddy/WorkBuddy 三端。
-   可通过环境变量覆盖，无需改源码：
-   ```powershell
-   $env:SKILL_HUB_DIRS = '[{"label":"MyHarness","path":"C:\\skills"},"/other/skills"]'
-   # 然后重启 dsh web
-   ```
-   数组元素可为纯字符串路径，或 `{ id?, label?, path }` 对象。
-2. **换标签/文案**：`kit/src/client/index.js` 内 `g.label` 来自 host 返回；
+### 4.1 技能目录发现（v1.2.0 起四级瀑布）
+
+| 优先级 | 来源 | 行为 |
+|--------|------|------|
+| 1 | `SKILL_HUB_DIRS` 环境变量 | JSON 数组（字符串或 `{id?,label?,path}`），**替换一切**（v1.1 向后兼容） |
+| 2 | `~/.dsh/skill-hub.json` 的 `roots` | 同上，替换一切 |
+| 3 | 自动探测 + 同配置文件 `extraRoots` | 默认路径 |
+| 4 | 兜底 `~/.dsh/skills` | 以上全空时 |
+
+自动探测两层：
+1. **静态候选表**（`KNOWN_ROOTS`）：`.dsh` `.codebuddy` `.workbuddy` `.claude` `.codex`
+   `.opencode` `.openclaw` `.openclaw-autoclaw` `.qoder` `.cursor` `.windsurf` `.agents`，
+   逐一检查 `<home>/<dir>/skills` 是否存在，**存在才收录**；
+2. **通用兜底扫描**：readdir 主目录一级，任何含 `skills` 子目录的 `.xxx` 目录都收录
+   （label 取目录名去点）——发布时未知的 Agent 也能被发现，可被 `"autoScan": false` 关闭。
+
+关键行为：**目录不存在就不出现在列表里**（v1.1 会把三个写死的目录全部展示，
+别人机器上出现两列红色「读取失败」——已修）。配置文件解析失败静默降级为 `{}`，永不抛错。
+
+### 4.2 其他可定制点
+
+1. **换标签/文案**：`kit/src/client/index.js` 内 `g.label` 来自 host 返回；
    按钮文案「🧩 技能」、面板标题「技能库」、`placeholder`「搜索技能名或简介…」均直接改字符串即可。
-3. **换插入动作**：`insert()` 默认插入 `@技能名`，若目标 harness 用别的语法（如 `/skill`）改这一处。
-4. **换路由/插槽**：host 路由 `apply()` 中的 `path`；client 插槽 `slots.inject('conversation.input.left', ...)`。
-5. 改完 `src/` 后执行 `deploy.ps1 -Build -Restart`。
+2. **换插入动作**：`insert()` 默认插入 `@技能名`，若目标 harness 用别的语法（如 `/skill`）改这一处。
+3. **换路由/插槽**：host 路由 `apply()` 中的 `path`；client 插槽 `slots.inject('conversation.input.left', ...)`。
+4. 改完 `src/` 后执行 `deploy.ps1 -Build -Restart`。
 
 ---
 
@@ -96,11 +118,11 @@ skill-hub 是一个 **DSh（DeepSeek Harness）Web 插件**，用途：在对话
    **解析前先 `mdText.replace(/^\uFEFF/, '')`**（已在 `parseDescription` 内处理，勿删）。
 4. **折叠多行 `description` 遇空行**：`description: >` 块内允许空行，解析时遇到空行应 `continue` 而非 `break`，
    否则 `72-daoyuan` 等长描述会被截断。
-5. **`legacy/host.js` 硬编码中文路径**：见第 3 节，移植必改。
+5. **`legacy/host.js` 主目录占位符**：见第 3 节，`HOME` 解析失败时为 `CHANGE_ME`，移植必查。
 6. **esbuild 在 Windows 的 win32 二进制问题**：`npm i esbuild` 后直接 `node build.mjs` 可能报
-   `Socket.readFromStdout` 错误（平台二进制缺失）。**可靠做法**是用仓库中已验证可用的 esbuild 二进制：
-   `node D:\aolong\repos\skill-hub\package\node_modules\esbuild\bin\esbuild <args>`。
-   （kit 自带 `src/node_modules/esbuild` 多数情况下也能用，若失败改用上述方式。）
+   `Socket.readFromStdout` 错误（平台二进制缺失）。**可靠做法**是用仓库中已验证可用的 esbuild 二进制
+   （本机 `D:\aolong\repos\skill-hub\package\node_modules\esbuild\bin\esbuild`），或 `cd kit\src && npm install` 后
+   `node src\build.mjs`（build.mjs 会从 `kit/src/node_modules` 解析）。
 7. **浏览器不刷新**：部署/重启后 Web UI 不更新，需 **`Ctrl+Shift+R` 硬刷新**。
 8. **client 用 `require('react')`**：`__ModuleLoader__` 的 CJS 工厂闭包只暴露 `require`，
    不直接暴露 `React`，必须从 `react` 模块取（已在 client 顶部处理）。
@@ -113,6 +135,19 @@ skill-hub 是一个 **DSh（DeepSeek Harness）Web 插件**，用途：在对话
       （浏览器端走 ModuleLoader，ESM 会报 `React is not defined`）。
     - `build.mjs` 的配置已正确区分两套格式；**手动跑 esbuild 时切勿给 host 加 banner**（会在 Node 报 `window is not defined`）。
     - 完整构建命令见 `build.mjs`；`deploy.ps1 -Build` 会调用它。
+    - 构建时 client 源文件的 `module.exports` 会触发一条 `commonjs-variable-in-esm` **警告**——
+      属预期（bundle 输出是 CJS），esbuild 两个产物均显示 `Done` 即为成功。
+11. **只复制文件 ≠ 安装（v1.1→v1.2 最大的坑）**：dsh 只加载 profile `package.json` 里
+    `dsh.profile.bundles` 数组列出的插件。只把产物复制进 `node_modules` 而不写数组，
+    插件永远不会被加载（API 404、按钮不出现）。**新机器一律用 `install.ps1`**（自动注册，
+    幂等，写前备份 `package.json.bak`）。
+12. **`dependencies` 用 `file:` 指向 tgz 时必须保证 tgz 随仓库分发**：本机 profile 曾用
+    `file:D:/aolong/repos/skill-hub/skill-hub-1.1.0.tgz`，而 tgz 没推上仓库 → 别人 `npm install`
+    解析必炸。v1.2 起 tgz 与仓库同步提交（`skill-hub-1.2.0.tgz`），离线复制安装则用 `"skill-hub": "*"`。
+13. **PowerShell 写文件默认带 BOM**：PS 5.1 `Set-Content -Encoding UTF8` 会写 BOM，污染 JSON 清单
+    （`JSON.parse` 可能失败）。改 JSON 一律用编辑器工具或 `New-Object System.Text.UTF8Encoding($false)`。
+14. **deploy.ps1 重启会杀端口的进程，杀前先验进程**：`Get-Process -Id <pid>).Path` 不匹配
+    `node|dsh` 就跳过并告警，防止误杀恰好占用 3080 的其他服务（install/deploy 均已内置）。
 
 ---
 
@@ -153,9 +188,10 @@ pwsh deploy.ps1 -Restart   # 不带 -Build，直接复制 kit/lib
 
 ## 7. 复用清单（打包发给别人 / 其他 Harness 时）
 
-必带：`src/`（或 `lib/` 二选一即可运行）、`deploy.ps1`、`dsh.plugin.json`、本 `SPEC.md`。
-建议带：`legacy/`（兜底）、`README.md`、`cordis.patch.yml`、`package.json`。
-可省略：`lib/*.map`（调试用，体积大）。
+必带：`src/`（或 `lib/` 二选一即可运行）、`install.ps1`、`dsh.plugin.json`、`README.md`、本 `SPEC.md`。
+建议带：`lib/`（预编译，免构建）、`deploy.ps1`、`legacy/`（兜底）、`cordis.patch.yml`、`package.json`、
+`smoke-resolve.mjs`、根目录 tgz（npm 安装用）。
+可省略：`lib/*.map`（调试用，体积大）、`src/node_modules`（接收方 `npm install` 重装）。
 
 ---
 
@@ -220,3 +256,21 @@ const insert = (name) => {
 ### 8.4 中文路径通用陷阱
 - 工具临时 `.ps1` 按 GBK 读，手敲含中文（如 `七兔`）的路径会变 `涓冨厰` 乱码 → 命令里一律 `$env:USERPROFILE` 拼接。
 - `search_content` 给含中文路径会回退成全仓搜索 → 改用 PowerShell `Select-String -Path (Join-Path $env:USERPROFILE '...')`。
+
+---
+
+## 9. 版本历史
+
+- **v1.2.0（2026-09-09）** — 「别人下载后真正可用」版本：
+  - host：目录发现改为四级瀑布（env → 配置文件 roots → 自动探测+extraRoots → 兜底），
+    静态候选表 + 通用 `.xxx/skills` 扫描；目录不存在不再展示（修「别人机器红色读取失败组」）；
+    `resolveRoots` 导出可测；`kit/smoke-resolve.mjs` 冒烟测试
+  - client：组错误显示完整原因；技能 tab 底部加自定义目录配置提示
+  - 脚本：新增 `install.ps1`（复制 + **注册 bundle**，防误杀进程校验）；`deploy.ps1`
+    参数化（`-Port`/`-WorkDir`/`param()`），去硬编码 workdir；`build.mjs` 路径锚定自身位置
+    （修复「build.mjs 在 src/ 但 deploy.ps1 在 kit 根找不到」的断链）
+  - legacy：去掉硬编码中文用户名，HOME 从环境解析（失败为 `CHANGE_ME` 占位）
+  - 清单：版本 1.2.0；description 更新（去掉 AutoClaw 三端表述）
+- **v1.1.0（2026-09-08）** — 技能引用置顶（方案A）+ 行内灰底标识 + lexicon source；
+  插件启停面板 + 中文简介映射
+- **v1.0.x（2026-08）** — 初版：三端目录扫描 + 技能选择弹窗 + 插件管理面板

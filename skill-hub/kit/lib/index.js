@@ -1,5 +1,5 @@
-// src/index.js
-import { readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
+// repos/dsh-plugins/skill-hub/kit/src/index.js
+import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 var name = "skill-hub";
@@ -60,24 +60,91 @@ function readSkill(parent, entry) {
 function readSkillDirs(root) {
   return readdirSync(root, { withFileTypes: true }).filter((e) => isSkillDir(root, e)).map((e) => readSkill(root, e)).sort((a, b) => a.name.localeCompare(b.name));
 }
+var KNOWN_ROOTS = [
+  { id: "dsh", label: "DeepSeek Harness", dir: ".dsh" },
+  { id: "workbuddy", label: "WorkBuddy", dir: ".workbuddy" },
+  { id: "codebuddy", label: "CodeBuddy", dir: ".codebuddy" },
+  { id: "claude", label: "Claude Code", dir: ".claude" },
+  { id: "codex", label: "Codex", dir: ".codex" },
+  { id: "opencode", label: "OpenCode", dir: ".opencode" },
+  { id: "openclaw", label: "OpenClaw", dir: ".openclaw" },
+  { id: "autoclaw", label: "AutoClaw", dir: ".openclaw-autoclaw" },
+  { id: "qoder", label: "Qoder", dir: ".qoder" },
+  { id: "cursor", label: "Cursor", dir: ".cursor" },
+  { id: "windsurf", label: "Windsurf", dir: ".windsurf" },
+  { id: "agents", label: "Shared (agents)", dir: ".agents" }
+];
+function rootKey(path) {
+  return path.replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+function normalizeRootList(list) {
+  return (Array.isArray(list) ? list : []).map(
+    (d) => typeof d === "string" ? { id: d, label: d, path: d } : { id: d.id || d.path, label: d.label || d.id || d.path, path: d.path }
+  );
+}
+function readHubConfig() {
+  try {
+    const cfgPath = join(homedir(), ".dsh", "skill-hub.json");
+    if (!existsSync(cfgPath)) return {};
+    return JSON.parse(readFileSync(cfgPath, "utf8")) || {};
+  } catch {
+    return {};
+  }
+}
+function detectRoots() {
+  const home = homedir();
+  const found = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (id, label, path) => {
+    const key = rootKey(path);
+    if (seen.has(key)) return;
+    try {
+      if (!statSync(path).isDirectory()) return;
+    } catch {
+      return;
+    }
+    seen.add(key);
+    found.push({ id, label, path });
+  };
+  for (const k of KNOWN_ROOTS) add(k.id, k.label, join(home, k.dir, "skills"));
+  let homeEntries = [];
+  try {
+    homeEntries = readdirSync(home, { withFileTypes: true });
+  } catch {
+  }
+  for (const e of homeEntries) {
+    if (!e.name.startsWith(".") || e.name === ".") continue;
+    if (KNOWN_ROOTS.some((k) => k.dir === e.name)) continue;
+    if (e.isDirectory() || e.isSymbolicLink()) {
+      const skills = join(home, e.name, "skills");
+      if (existsSync(skills)) add(e.name.slice(1), e.name.slice(1), skills);
+    }
+  }
+  return found;
+}
 function resolveRoots() {
   const raw = process.env.SKILL_HUB_DIRS;
   if (raw) {
     try {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.length) {
-        return arr.map(
-          (d) => typeof d === "string" ? { id: d, label: d, path: d } : { id: d.id || d.path, label: d.label || d.id || d.path, path: d.path }
-        );
-      }
+      if (Array.isArray(arr) && arr.length) return normalizeRootList(arr);
     } catch {
     }
   }
-  return [
-    { id: "dsh", label: "DeepSeek Harness", path: join(homedir(), ".dsh", "skills") },
-    { id: "codebuddy", label: "CodeBuddy", path: join(homedir(), ".codebuddy", "skills") },
-    { id: "workbuddy", label: "WorkBuddy", path: join(homedir(), ".workbuddy", "skills") }
-  ];
+  const cfg = readHubConfig();
+  if (Array.isArray(cfg.roots) && cfg.roots.length) return normalizeRootList(cfg.roots);
+  const auto = cfg.autoScan === false ? [] : detectRoots();
+  const extra = normalizeRootList(cfg.extraRoots);
+  const merged = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const r of [...auto, ...extra]) {
+    const key = rootKey(r.path);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(r);
+  }
+  if (merged.length) return merged;
+  return [{ id: "dsh", label: "DeepSeek Harness", path: join(homedir(), ".dsh", "skills") }];
 }
 function apply(ctx) {
   ctx.webServer.register({
@@ -222,6 +289,7 @@ function apply(ctx) {
 export {
   apply,
   inject,
-  name
+  name,
+  resolveRoots
 };
 //# sourceMappingURL=index.js.map

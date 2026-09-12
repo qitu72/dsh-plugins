@@ -13,7 +13,7 @@
  * Static npm extensions cannot reach the dynamic-cordis `harness` sandbox, so
  * `webServer` is the sanctioned host-side service seam for this shape.
  */
-import { readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -98,34 +98,118 @@ function readSkillDirs(root) {
 }
 
 /**
- * Resolve the skill root directories.
- *
- * Defaults to the three client libraries (DeepSeek Harness / CodeBuddy / WorkBuddy).
- * Overridable via the `SKILL_HUB_DIRS` env var — a JSON array of either plain
- * path strings or `{ id?, label?, path }` objects — so the plugin can be
- * repointed at other harness products (or a different machine) without editing
- * source. Example:
- *   SKILL_HUB_DIRS='[{"label":"MyHarness","path":"C:\\\\skills"},"/other/skills"]'
+ * Well-known Agent skill directories. Only a prefix map — the actual path is
+ * always `<homedir>/<dir>/skills`, so nothing user-specific is hardcoded.
+ * Agents whose directory does not exist on this machine are simply not shown.
  */
-function resolveRoots() {
+const KNOWN_ROOTS = [
+  { id: 'dsh', label: 'DeepSeek Harness', dir: '.dsh' },
+  { id: 'workbuddy', label: 'WorkBuddy', dir: '.workbuddy' },
+  { id: 'codebuddy', label: 'CodeBuddy', dir: '.codebuddy' },
+  { id: 'claude', label: 'Claude Code', dir: '.claude' },
+  { id: 'codex', label: 'Codex', dir: '.codex' },
+  { id: 'opencode', label: 'OpenCode', dir: '.opencode' },
+  { id: 'openclaw', label: 'OpenClaw', dir: '.openclaw' },
+  { id: 'autoclaw', label: 'AutoClaw', dir: '.openclaw-autoclaw' },
+  { id: 'qoder', label: 'Qoder', dir: '.qoder' },
+  { id: 'cursor', label: 'Cursor', dir: '.cursor' },
+  { id: 'windsurf', label: 'Windsurf', dir: '.windsurf' },
+  { id: 'agents', label: 'Shared (agents)', dir: '.agents' },
+]
+
+/** Canonical key for de-duplicating roots across discovery layers. */
+function rootKey(path) {
+  return path.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+/** Normalize a user-supplied root list (strings or `{id?,label?,path}` objects). */
+function normalizeRootList(list) {
+  return (Array.isArray(list) ? list : []).map((d) =>
+    typeof d === 'string'
+      ? { id: d, label: d, path: d }
+      : { id: d.id || d.path, label: d.label || d.id || d.path, path: d.path },
+  )
+}
+
+/**
+ * Read the optional user config file `~/.dsh/skill-hub.json`:
+ *   { "extraRoots": ["C:\\path\\to\\skills" | {"label":"X","path":"..."}],  // appended to auto-detected roots
+ *     "roots":       [...],   // replaces everything (same shape as SKILL_HUB_DIRS)
+ *     "autoScan":    false }  // disable home-dir auto discovery
+ * Missing file / parse error → `{}` (never throws).
+ */
+function readHubConfig() {
+  try {
+    const cfgPath = join(homedir(), '.dsh', 'skill-hub.json')
+    if (!existsSync(cfgPath)) return {}
+    return JSON.parse(readFileSync(cfgPath, 'utf8')) || {}
+  } catch { return {} }
+}
+
+/**
+ * Discover skill roots on this machine:
+ * 1. every KNOWN_ROOTS entry whose `<home>/<dir>/skills` directory exists;
+ * 2. generic sweep: any first-level dot-directory under homedir containing a
+ *    `skills` subdirectory that the static table missed — this is how agents
+ *    unknown at authoring time are still picked up.
+ */
+function detectRoots() {
+  const home = homedir()
+  const found = []
+  const seen = new Set()
+  const add = (id, label, path) => {
+    const key = rootKey(path)
+    if (seen.has(key)) return
+    try {
+      if (!statSync(path).isDirectory()) return
+    } catch { return }
+    seen.add(key)
+    found.push({ id, label, path })
+  }
+  for (const k of KNOWN_ROOTS) add(k.id, k.label, join(home, k.dir, 'skills'))
+  let homeEntries = []
+  try { homeEntries = readdirSync(home, { withFileTypes: true }) } catch { /* keep what we have */ }
+  for (const e of homeEntries) {
+    if (!e.name.startsWith('.') || e.name === '.') continue
+    if (KNOWN_ROOTS.some((k) => k.dir === e.name)) continue // already handled
+    if (e.isDirectory() || e.isSymbolicLink()) {
+      const skills = join(home, e.name, 'skills')
+      if (existsSync(skills)) add(e.name.slice(1), e.name.slice(1), skills)
+    }
+  }
+  return found
+}
+
+/**
+ * Resolve the skill root directories, in priority order:
+ * 1. `SKILL_HUB_DIRS` env var (back-compat: replaces everything);
+ * 2. `roots` in `~/.dsh/skill-hub.json` (replaces everything);
+ * 3. auto-detection + `extraRoots` from the config file;
+ * 4. last-resort fallback: `~/.dsh/skills` (always exists for a dsh user).
+ * Exported for testability.
+ */
+export function resolveRoots() {
   const raw = process.env.SKILL_HUB_DIRS
   if (raw) {
     try {
       const arr = JSON.parse(raw)
-      if (Array.isArray(arr) && arr.length) {
-        return arr.map((d) =>
-          typeof d === 'string'
-            ? { id: d, label: d, path: d }
-            : { id: d.id || d.path, label: d.label || d.id || d.path, path: d.path },
-        )
-      }
-    } catch { /* fall through to default */ }
+      if (Array.isArray(arr) && arr.length) return normalizeRootList(arr)
+    } catch { /* fall through */ }
   }
-  return [
-    { id: 'dsh', label: 'DeepSeek Harness', path: join(homedir(), '.dsh', 'skills') },
-    { id: 'codebuddy', label: 'CodeBuddy', path: join(homedir(), '.codebuddy', 'skills') },
-    { id: 'workbuddy', label: 'WorkBuddy', path: join(homedir(), '.workbuddy', 'skills') },
-  ]
+  const cfg = readHubConfig()
+  if (Array.isArray(cfg.roots) && cfg.roots.length) return normalizeRootList(cfg.roots)
+  const auto = cfg.autoScan === false ? [] : detectRoots()
+  const extra = normalizeRootList(cfg.extraRoots)
+  const merged = []
+  const seen = new Set()
+  for (const r of [...auto, ...extra]) {
+    const key = rootKey(r.path)
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(r)
+  }
+  if (merged.length) return merged
+  return [{ id: 'dsh', label: 'DeepSeek Harness', path: join(homedir(), '.dsh', 'skills') }]
 }
 
 /**
